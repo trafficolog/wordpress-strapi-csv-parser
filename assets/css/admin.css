@@ -1,0 +1,100 @@
+.spinner {
+  float: none;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+.error-message {
+  color: #dc3232;
+  margin: 5px 0;
+}
+
+.strapi-parser-container {
+  margin-top: 20px;
+}
+
+.strapi-parser-section {
+  background: #fff;
+  padding: 20px;
+  border: 1px solid #ccd0d4;
+  box-shadow: 0 1px 1px rgba(0,0,0,.04);
+  margin-bottom: 20px;
+}
+
+.strapi-parser-source-tabs {
+  margin-bottom: 0;
+  border-bottom: 1px solid #ccd0d4;
+}
+
+.source-tab {
+  display: inline-block;
+  padding: 10px 15px;
+  margin: 0 5px -1px 0;
+  font-weight: 600;
+  border: 1px solid transparent;
+  text-decoration: none;
+  background: #f1f1f1;
+}
+
+.source-tab.active {
+  border-color: #ccd0d4;
+  border-bottom-color: #fff;
+  background: #fff;
+}
+
+.source-content {
+  display: none;
+  padding: 20px;
+  border: 1px solid #ccd0d4;
+  border-top: none;
+}
+
+.source-content.active {
+  display: block;
+}
+
+/* Стили для прогресс-бара */
+.progress-bar-wrapper {
+  height: 20px;
+  background-color: #f1f1f1;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: #4CAF50;
+  text-align: center;
+  line-height: 20px;
+  color: white;
+  transition: width 0.3s;
+}
+
+.progress-stats {
+  margin-bottom: 15px;
+}
+
+/* Стили для контейнера процесса */
+.process-container {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+}
+
+.process-actions {
+  margin: 15px 0;
+}
+
+.process-actions .button {
+  margin-right: 10px;
+}
+
+.process-results {
+  margin-top: 15px;
+}
+
+.file-info {
+  margin-bottom: 15px;
+}
