@@ -1,4 +1,8 @@
 <?php
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+
 /**
  * Класс для взаимодействия с Strapi API
  *
@@ -67,7 +71,14 @@ class StrapiCSVParser_ApiClient {
      * @return array|WP_Error Результат запроса
      */
     public function send_data($endpoint, $data) {
-        return $this->send_request($endpoint, ['data' => $data], 'POST');
+      // Ensure data has proper structure
+      $payload = ['data' => $data];
+    
+      // Логирование для отладки
+      $this->logger->log('debug', "Sending data to endpoint: {$endpoint}");
+      $this->logger->log('debug', "Payload: " . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+      
+      return $this->send_request($endpoint, $payload, 'POST');
     }
 
     /**
@@ -80,81 +91,116 @@ class StrapiCSVParser_ApiClient {
      * @return array|WP_Error Результат запроса
      */
     public function send_request($endpoint, $data = [], $method = 'GET', $retry_count = 0) {
-        // Проверка наличия URL и токена
-        if (empty($this->api_url)) {
-            return new WP_Error('invalid_api_url', 'URL API не указан в настройках');
-        }
-
-        if (empty($this->api_token)) {
-            return new WP_Error('invalid_api_token', 'API токен не указан в настройках');
-        }
-
-        // Формирование полного URL
-        $url = rtrim($this->api_url, '/') . '/' . ltrim($endpoint, '/');
-
-        // Подготовка аргументов запроса
-        $args = [
-            'timeout' => $this->timeout,
-            'headers' => [
-                'Content-Type' => 'application/json',
-                'Authorization' => 'Bearer ' . $this->api_token
-            ]
-        ];
-
-        // Добавление данных для POST и PUT запросов
-        if ($method === 'POST' || $method === 'PUT') {
-            $args['method'] = $method;
-            $args['body'] = json_encode($data);
-        }
-
-        $this->logger->log('debug', "Запрос {$method} к {$url}" . ($data ? ' с данными: ' . json_encode($data) : ''));
-
-        // Отправка запроса
-        $response = wp_remote_request($url, $args);
-
-        // Обработка ошибок запроса
-        if (is_wp_error($response)) {
-            $error_message = $response->get_error_message();
-            $this->logger->log('error', "Ошибка запроса: {$error_message}");
-            
-            // Пробуем повторить запрос при временных ошибках
-            if ($retry_count < $this->max_retries) {
-                $wait_time = pow(2, $retry_count) * 1000000; // Экспоненциальная задержка в микросекундах
-                usleep($wait_time); // Ждем перед повторным запросом
-                return $this->send_request($endpoint, $data, $method, $retry_count + 1);
+        try {
+            // Проверка наличия URL и токена
+            if (empty($this->api_url)) {
+                return new WP_Error('invalid_api_url', 'URL API не указан в настройках');
             }
-            
-            return $response;
-        }
-
-        // Получение кода ответа
-        $response_code = wp_remote_retrieve_response_code($response);
-        $response_body = wp_remote_retrieve_body($response);
-        $response_data = json_decode($response_body, true);
-
-        // Логирование ответа
-        $this->logger->log('debug', "Ответ {$response_code}: " . substr($response_body, 0, 500) . (strlen($response_body) > 500 ? '...' : ''));
-
-        // Обработка ошибок от API
-        if ($response_code < 200 || $response_code >= 300) {
-            $error_message = isset($response_data['error']['message']) ? $response_data['error']['message'] : "HTTP Error: {$response_code}";
-            $this->logger->log('error', "Ошибка API: {$error_message}");
-            
-            // Пробуем повторить запрос при временных ошибках сервера
-            if ($response_code >= 500 && $retry_count < $this->max_retries) {
-                $wait_time = pow(2, $retry_count) * 1000000; // Экспоненциальная задержка
-                usleep($wait_time);
-                return $this->send_request($endpoint, $data, $method, $retry_count + 1);
+    
+            if (empty($this->api_token)) {
+                return new WP_Error('invalid_api_token', 'API токен не указан в настройках');
             }
+    
+            // Формирование полного URL
+            $url = rtrim($this->api_url, '/') . '/' . ltrim($endpoint, '/');
+    
+            // Подготовка аргументов запроса
+            $args = [
+                'timeout' => $this->timeout,
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Authorization' => 'Bearer ' . $this->api_token
+                ]
+            ];
+    
+            // Добавление данных для POST и PUT запросов
+            if ($method === 'POST' || $method === 'PUT') {
+                $args['method'] = $method;
+                $args['body'] = json_encode($data, JSON_UNESCAPED_UNICODE);
+            }
+    
+            $this->logger->log('debug', "Запрос {$method} к {$url}");
             
-            return new WP_Error('api_error', $error_message, [
-                'code' => $response_code,
-                'body' => $response_data
-            ]);
+            // Для отладки логируем полные данные запроса, но только в режиме debug
+            $settings = get_option('strapi_parser_settings', []);
+            if (isset($settings['debug']) && $settings['debug']) {
+                $this->logger->log('debug', "Полные данные запроса: " . json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+            }
+    
+            // Отправка запроса
+            $response = wp_remote_request($url, $args);
+    
+            // Обработка ошибок запроса
+            if (is_wp_error($response)) {
+                $error_message = $response->get_error_message();
+                $this->logger->log('error', "Ошибка запроса: {$error_message}");
+                
+                // Пробуем повторить запрос при временных ошибках
+                if ($retry_count < $this->max_retries) {
+                    $wait_time = pow(2, $retry_count) * 1000000; // Экспоненциальная задержка в микросекундах
+                    usleep($wait_time); // Ждем перед повторным запросом
+                    return $this->send_request($endpoint, $data, $method, $retry_count + 1);
+                }
+                
+                return $response;
+            }
+    
+            // Получение кода ответа
+            $response_code = wp_remote_retrieve_response_code($response);
+            $response_body = wp_remote_retrieve_body($response);
+            
+            // Проверяем, что ответ JSON и декодируем его
+            $this->logger->log('debug', "Ответ {$response_code} от {$url}");
+            
+            if (!empty($response_body)) {
+                // Проверка, что это действительно JSON
+                if (substr(trim($response_body), 0, 1) === '{' || substr(trim($response_body), 0, 1) === '[') {
+                    $response_data = json_decode($response_body, true);
+                    
+                    // Проверка на ошибку декодирования JSON
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        $this->logger->log('error', "Ошибка декодирования JSON: " . json_last_error_msg() . ". Ответ начинается с: " . substr($response_body, 0, 100));
+                        return new WP_Error('json_decode_error', 'Ошибка декодирования JSON: ' . json_last_error_msg());
+                    }
+                } else {
+                    // Вероятно это HTML или другой формат
+                    $this->logger->log('error', "Получен неожиданный формат ответа (не JSON). Ответ начинается с: " . substr($response_body, 0, 100));
+                    return new WP_Error('invalid_response', 'Получен неожиданный формат ответа (не JSON): ' . substr($response_body, 0, 100));
+                }
+            } else {
+                $response_data = [];
+            }
+    
+            // Обработка ошибок от API
+            if ($response_code < 200 || $response_code >= 300) {
+                $error_message = isset($response_data['error']['message']) ? $response_data['error']['message'] : "HTTP Error: {$response_code}";
+                
+                // Подробное логирование ошибки
+                if (isset($response_data['error']['details'])) {
+                    $this->logger->log('error', "Детали ошибки API: " . json_encode($response_data['error']['details'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                }
+                
+                $this->logger->log('error', "Ошибка API: {$error_message}");
+                
+                // Пробуем повторить запрос при временных ошибках сервера
+                if ($response_code >= 500 && $retry_count < $this->max_retries) {
+                    $wait_time = pow(2, $retry_count) * 1000000; // Экспоненциальная задержка
+                    usleep($wait_time);
+                    return $this->send_request($endpoint, $data, $method, $retry_count + 1);
+                }
+                
+                return new WP_Error('api_error', $error_message, [
+                    'code' => $response_code,
+                    'body' => $response_data
+                ]);
+            }
+    
+            // Успешный ответ
+            return $response_data;
+        } catch (Exception $e) {
+            $this->logger->log('error', "Исключение в send_request: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return new WP_Error('request_exception', 'Исключение при отправке запроса: ' . $e->getMessage());
         }
-
-        // Успешный ответ
-        return $response_data;
     }
 
     /**

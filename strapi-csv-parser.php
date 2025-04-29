@@ -85,7 +85,6 @@ class StrapiCSVParser {
 
         // Регистрируем AJAX обработчики
         add_action('wp_ajax_strapi_parser_upload_csv', array($this, 'ajax_upload_csv'));
-        add_action('wp_ajax_strapi_parser_process_batch', array($this, 'ajax_process_batch'));
         add_action('wp_ajax_strapi_parser_merge_profiles', array($this, 'ajax_merge_profiles'));
         add_action('wp_ajax_strapi_parser_get_progress', array($this, 'ajax_get_progress'));
         add_action('wp_ajax_strapi_parser_test_connection', array($this, 'ajax_test_connection'));
@@ -168,6 +167,16 @@ class StrapiCSVParser {
             'strapi-csv-parser-merge',
             array($this->merger, 'merge_page')
         );
+
+        // Добавляем страницу отладки
+        add_submenu_page(
+          'strapi-csv-parser',
+          'Отладка парсера',
+          'Отладка',
+          'manage_options',
+          'strapi-csv-parser-debug',
+          array($this, 'debug_page')
+        );
     }
 
     /**
@@ -220,6 +229,11 @@ class StrapiCSVParser {
      */
     public function admin_page() {
         include STRAPI_PARSER_PLUGIN_DIR . 'views/admin-page.php';
+    }
+
+    // Добавьте метод для отображения отладочной страницы
+    public function debug_page() {
+      include STRAPI_PARSER_PLUGIN_DIR . 'views/debug-page.php';
     }
 
     /**
@@ -282,47 +296,6 @@ class StrapiCSVParser {
       } else {
           wp_send_json_success($industries);
       }
-    }
-
-    /**
-     * AJAX обработчик для обработки пакета данных
-     */
-    public function ajax_process_batch() {
-        check_ajax_referer('strapi-parser-nonce', 'nonce');
-
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('Недостаточно прав');
-        }
-
-        // Получаем параметры
-        $file_id = isset($_POST['file_id']) ? sanitize_text_field($_POST['file_id']) : '';
-        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
-        $source = isset($_POST['source']) ? sanitize_text_field($_POST['source']) : '';
-        $category_id = isset($_POST['category_id']) ? sanitize_text_field($_POST['category_id']) : '';
-        $subcategory_id = isset($_POST['subcategory_id']) ? sanitize_text_field($_POST['subcategory_id']) : '';
-        $subsubcategory_id = isset($_POST['subsubcategory_id']) ? sanitize_text_field($_POST['subsubcategory_id']) : '';
-
-        // Проверяем обязательные поля
-        if (empty($file_id) || empty($source) || empty($category_id)) {
-            wp_send_json_error('Не указаны обязательные параметры');
-        }
-
-        // Проверяем существование файла
-        $file_path = $this->parser->get_file_path($file_id);
-        if (!file_exists($file_path)) {
-            wp_send_json_error('Файл не найден');
-        }
-
-        // Обработка пакета данных
-        $result = $this->parser->process_batch($file_path, $offset, $source, $category_id, $subcategory_id, $subsubcategory_id);
-
-        if (is_wp_error($result)) {
-            $this->logger->log('error', 'Ошибка обработки пакета: ' . $result->get_error_message());
-            wp_send_json_error($result->get_error_message());
-        } else {
-            $this->logger->log('info', "Обработан пакет записей: {$result['processed']} из {$result['total']}");
-            wp_send_json_success($result);
-        }
     }
 
     /**

@@ -311,16 +311,22 @@ jQuery(document).ready(function($) {
 
     // Функция для обработки одного пакета данных
     function processBatch() {
-        // Если процесс остановлен или все данные обработаны, выходим
-        if (!isProcessing || currentOffset >= totalRows) {
+        // Если процесс остановлен, выходим
+        if (!isProcessing) {
             return;
         }
-
+    
+        // Важно! Не завершаем процесс заранее на основе счетчиков
+        // if (currentOffset >= totalRows) {
+        //     finishProcessing();
+        //     return;
+        // }
+    
         // Отображаем текущий прогресс
         var progress = Math.floor((processedCount / totalRows) * 100);
         processContainer.find('.progress-bar').css('width', progress + '%').text(progress + '%');
         processContainer.find('.processed').text(processedCount);
-
+    
         // Отправляем AJAX запрос для обработки пакета
         $.ajax({
             url: strapiParser.ajaxUrl,
@@ -333,43 +339,95 @@ jQuery(document).ready(function($) {
                 source: source,
                 category_id: categoryId,
                 subcategory_id: subcategoryId,
-                subsubcategory_id: subsubcategoryId,
-                batch_size: batchSize
+                subsubcategory_id: subsubcategoryId
             },
             success: function(response) {
                 if (response.success) {
+                    console.log('Ответ от сервера:', response.data);
+                    
                     // Обновляем счетчики
-                    currentOffset += response.data.processed;
-                    processedCount += response.data.processed;
-                    successCount += response.data.success || 0;
-                    failedCount += response.data.failed || 0;
-
+                    if (typeof response.data.next_offset !== 'undefined') {
+                        currentOffset = response.data.next_offset;
+                    }
+                    if (typeof response.data.processed !== 'undefined') {
+                        processedCount = response.data.processed;
+                    }
+                    if (typeof response.data.success !== 'undefined') {
+                        successCount = response.data.success;
+                    }
+                    if (typeof response.data.failed !== 'undefined') {
+                        failedCount = response.data.failed;
+                    }
+    
                     // Обновляем прогресс
                     var newProgress = Math.floor((processedCount / totalRows) * 100);
                     processContainer.find('.progress-bar').css('width', newProgress + '%').text(newProgress + '%');
                     processContainer.find('.processed').text(processedCount);
-
-                    // Если есть еще данные для обработки, продолжаем
-                    if (currentOffset < totalRows && isProcessing) {
-                        // Небольшая пауза между запросами для снижения нагрузки
-                        setTimeout(processBatch, 200);
-                    } else {
-                        // Обработка завершена
-                        finishProcessing();
+                    
+                    // Обновляем результаты
+                    if (response.data.results && response.data.results.length > 0) {
+                        updateResultsDisplay(response.data.results);
                     }
+    
+                    // Проверяем завершение только по флагу с сервера
+                    if (response.data.completed === true) {
+                        console.log('Процесс завершен по флагу с сервера');
+                        finishProcessing();
+                        return;
+                    }
+    
+                    // Продолжаем обработку
+                    setTimeout(processBatch, 500);
                 } else {
-                    // Ошибка обработки пакета
                     handleError('Ошибка обработки данных: ' + response.data);
                 }
             },
             error: function(xhr, status, error) {
+                console.error('Ошибка AJAX:', xhr.responseText);
                 handleError('Ошибка соединения: ' + error);
             }
         });
     }
 
+    // Функция для обновления отображения результатов
+    function updateResultsDisplay(results) {
+      var resultsContainer = processContainer.find('.process-results');
+      var html = '';
+      
+      if (results.length > 0) {
+          html += '<div class="batch-results">';
+          html += '<h4>Результаты последнего пакета:</h4>';
+          html += '<ul>';
+          
+          $.each(results, function(index, result) {
+              if (result.success) {
+                  html += '<li class="success">✓ ' + result.name + ' (ID: ' + result.id + ')</li>';
+              } else {
+                  html += '<li class="error">✗ ' + result.name + ' - Ошибка: ' + result.error + '</li>';
+              }
+          });
+          
+          html += '</ul>';
+          html += '</div>';
+      }
+      
+      // Добавляем новые результаты вверху контейнера
+      resultsContainer.prepend(html);
+      
+      // Ограничиваем количество показываемых результатов
+      var maxResults = 5;
+      if (resultsContainer.find('.batch-results').length > maxResults) {
+          resultsContainer.find('.batch-results:gt(' + (maxResults - 1) + ')').remove();
+      }
+    }
+
     // Функция для завершения процесса
     function finishProcessing() {
+        // Если процесс уже был завершен, не делаем ничего
+        if (!isProcessing) {
+            return;
+        }
+
         isProcessing = false;
         var endTime = new Date();
         var processingTime = Math.round((endTime - startTime) / 1000); // в секундах
